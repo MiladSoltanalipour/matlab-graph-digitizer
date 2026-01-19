@@ -1,6 +1,6 @@
 # MATLAB Graph Digitizer – Picture to Excel
 
-This repository provides a MATLAB-based interactive tool to extract numerical data from published graph images and export them to Excel format. The program is designed for engineering applications such as force–deflection, moment–curvature, or load–displacement curves when raw experimental data are not available.
+This repository provides a MATLAB-based interactive tool to extract numerical data from published graph images and export them to Excel format. The program is designed for engineering applications such as force–deflection, moment–curvature, or load–displacement curves when raw experimental data are not available. The software does not reproduce, redistribute, or modify copyrighted figures; it only assists in extracting approximate numerical values visible in the original image. Users are responsible for properly citing the original source of any digitized figure.
 
 # Features
 
