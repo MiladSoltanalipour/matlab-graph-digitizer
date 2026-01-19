@@ -1,0 +1,94 @@
+%% IMAGE-TO-EXCEL CURVE DIGITIZER (INTERACTIVE)
+% Author: ---
+% Requirements: Image Processing Toolbox
+
+clear; clc; close all;
+
+%% USER PARAMETERS
+nPoints = 100;              % number of points per curve
+minCurveArea = 200;         % remove small noisy objects
+excelFile = 'digitized_curves.xlsx';
+
+%% LOAD IMAGE
+[file, path] = uigetfile({'*.png;*.jpg;*.tif'}, 'Select graph image');
+if isequal(file,0); return; end
+img = imread(fullfile(path,file));
+
+figure('Name','Original Image');
+imshow(img); title('Original Image');
+
+%% AXIS CALIBRATION (USER INPUT)
+disp('Select two points on X-axis with known values');
+[xp, yp] = ginput(2);
+prompt = {'X value at first point:','X value at second point:'};
+xval = str2double(inputdlg(prompt,'X calibration',1,{'0','1'}));
+
+disp('Select two points on Y-axis with known values');
+[xpY, ypY] = ginput(2);
+prompt = {'Y value at first point:','Y value at second point:'};
+yval = str2double(inputdlg(prompt,'Y calibration',1,{'0','1'}));
+
+% Pixel to data mapping
+ax = polyfit(xp, xval', 1);
+ay = polyfit(ypY, yval', 1);
+
+pix2x = @(x) ax(1)*x + ax(2);
+pix2y = @(y) ay(1)*y + ay(2);
+
+%% IMAGE PROCESSING
+imgHSV = rgb2hsv(img);
+sat = imgHSV(:,:,2);
+val = imgHSV(:,:,3);
+
+% Enhance curves
+bw = sat > 0.2 & val < 0.95;
+bw = bwareaopen(bw, minCurveArea);
+bw = imclose(bw, strel('disk',2));
+bw = bwmorph(bw,'thin',Inf);
+
+%% LABEL CURVES
+cc = bwconncomp(bw);
+stats = regionprops(cc,'PixelIdxList','PixelList','Area');
+nCurves = numel(stats);
+
+fprintf('Detected %d curves\n', nCurves);
+
+figure('Name','Detected Curves');
+imshow(img); hold on;
+
+allData = cell(nCurves,1);
+
+%% PROCESS EACH CURVE
+for i = 1:nCurves
+    pix = stats(i).PixelList;
+    
+    % Sort points along curve
+    [~,idx] = sort(pix(:,1));
+    pix = pix(idx,:);
+    
+    % Arc-length parameterization
+    d = [0; cumsum(sqrt(sum(diff(pix).^2,2)))];
+    di = linspace(0,d(end),nPoints);
+    
+    xi = interp1(d,pix(:,1),di);
+    yi = interp1(d,pix(:,2),di);
+    
+    % Convert to real coordinates
+    X = pix2x(xi);
+    Y = pix2y(yi);
+    
+    allData{i} = [X(:), Y(:)];
+    
+    plot(xi, yi, 'LineWidth',2);
+end
+
+title('Identified curves (overlay)');
+hold off;
+
+%% EXPORT TO EXCEL
+for i = 1:nCurves
+    T = array2table(allData{i},'VariableNames',{'X','Y'});
+    writetable(T, excelFile,'Sheet',['Curve_' num2str(i)]);
+end
+
+disp(['Data exported to ', excelFile]);
