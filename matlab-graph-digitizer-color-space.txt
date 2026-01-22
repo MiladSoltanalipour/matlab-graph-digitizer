@@ -1,0 +1,84 @@
+%% IMAGE-TO-EXCEL GRAPH DIGITIZER (COLOR-BASED CURVE GROUPING)
+clear; clc; close all;
+
+nPoints = 100;
+excelFile = 'digitized_curves.xlsx';
+
+%% LOAD IMAGE
+[file,path] = uigetfile({'*.png;*.jpg;*.tif'});
+if isequal(file,0); return; end
+img = imread(fullfile(path,file));
+
+figure; imshow(img); title('Original image');
+
+%% AXIS CALIBRATION
+disp('Select two points on X-axis');
+[xp,~] = ginput(2);
+xval = str2double(inputdlg({'X1','X2'}));
+
+disp('Select two points on Y-axis');
+[~,yp] = ginput(2);
+yval = str2double(inputdlg({'Y1','Y2'}));
+
+ax = polyfit(xp,xval',1);
+ay = polyfit(yp,yval',1);
+pix2x = @(x) ax(1)*x+ax(2);
+pix2y = @(y) ay(1)*y+ay(2);
+
+%% COLOR-BASED SEGMENTATION
+hsv = rgb2hsv(img);
+mask = hsv(:,:,2) > 0.25 & hsv(:,:,3) < 0.95;
+pix = reshape(img,[],3);
+pixMask = reshape(mask,[],1);
+
+% Estimate number of curves from dominant colors
+pixC = double(pix(pixMask,:));
+nColors = min(6, size(pixC,1));  % safe upper bound
+[idx,~] = kmeans(pixC,nColors,'Replicates',5);
+
+%% ASSIGN PIXELS TO COLOR CLUSTERS
+labelImg = zeros(size(mask));
+labelImg(pixMask) = idx;
+
+figure; imshow(img); hold on;
+
+curveID = 0;
+for c = 1:nColors
+    bw = labelImg==c;
+    bw = imclose(bw,strel('disk',4));   % bridge dashed gaps
+    bw = bwmorph(bw,'thin',Inf);
+    if nnz(bw)<200; continue; end
+    
+    curveID = curveID+1;
+    [y,x] = find(bw);
+    P = [x y];
+    
+    % Sort by arc length
+    [~,i0] = min(P(:,1));
+    Q = P(i0,:);
+    used = false(size(P,1),1);
+    used(i0)=true;
+    for k=2:size(P,1)
+        d = sum((P(~used,:) - Q(end,:)).^2,2);
+        [~,j] = min(d);
+        idx2 = find(~used);
+        Q(end+1,:) = P(idx2(j),:);
+        used(idx2(j))=true;
+    end
+    
+    s = [0;cumsum(sqrt(sum(diff(Q).^2,2)))];
+    si = linspace(0,s(end),nPoints);
+    xi = interp1(s,Q(:,1),si);
+    yi = interp1(s,Q(:,2),si);
+    
+    X = pix2x(xi);
+    Y = pix2y(yi);
+    
+    writetable(table(X(:),Y(:)),excelFile,...
+        'Sheet',['Curve_' num2str(curveID)]);
+    
+    plot(xi,yi,'LineWidth',2);
+end
+
+title('Color-grouped curves (final result)');
+hold off;
